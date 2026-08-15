@@ -61,6 +61,20 @@ defmodule ReqLLM.Providers.OllamaTest do
       body = Ollama.build_body(request)
       assert body.keep_alive == "30m"
     end
+
+    test "omits :reasoning_effort key when not given" do
+      request = req_with_opts(model: "llama3", context: simple_context())
+      body = Ollama.build_body(request)
+      refute Map.has_key?(body, :reasoning_effort)
+    end
+
+    test "injects reasoning_effort at body top-level, atom coerced to string (:none disables thinking)" do
+      request =
+        req_with_opts(model: "qwen3:14b", context: simple_context(), reasoning_effort: :none)
+
+      body = Ollama.build_body(request)
+      assert body.reasoning_effort == "none"
+    end
   end
 
   describe "attach/3" do

@@ -25,10 +25,24 @@ defmodule ReqLLM.Providers.Ollama do
   - `num_ctx` — context window size in tokens (Ollama `options.num_ctx`)
   - `keep_alive` — how long to keep model loaded, e.g. `"30m"` or `0` to unload immediately
 
+  ## Reasoning models
+
+  `reasoning_effort` is a **core** ReqLLM option (pass it top-level, not under
+  `provider_options`). ReqLLM's default body builder accepts it but does not emit
+  it, so this provider forwards it as a top-level Ollama body field. `"none"`
+  disables thinking entirely — clean, fast structured output from Qwen3/Gemma-style
+  reasoning models. Ollama honors this on the `/v1` endpoint; the native `think`
+  flag does not apply there.
+
   ## Examples
 
       ReqLLM.generate_text("ollama:gemma4:27b", "Hello",
         provider_options: [num_ctx: 16_384, keep_alive: "30m"]
+      )
+
+      # Disable thinking on a reasoning model for fast, clean structured output:
+      ReqLLM.generate_object("ollama:qwen3:14b", "Extract entities…", schema,
+        reasoning_effort: :none
       )
   """
 
@@ -147,15 +161,19 @@ defmodule ReqLLM.Providers.Ollama do
   @doc """
   Builds the Ollama request body.
 
-  Extends the standard OpenAI-compat body with two Ollama-specific fields:
+  Extends the standard OpenAI-compat body with Ollama-specific fields:
   - `options.num_ctx` — nested under the `options` map (Ollama model parameter)
   - `keep_alive` — top-level field controlling how long the model stays loaded
+  - `reasoning_effort` — top-level field controlling thinking (`"none"` disables it).
+    `default_build_body/1` recognizes `reasoning_effort` as an option but does not
+    emit it, so the Ollama provider forwards it here.
   """
   @impl ReqLLM.Provider
   def build_body(request) do
     ReqLLM.Provider.Defaults.default_build_body(request)
     |> maybe_add_num_ctx(request.options[:num_ctx])
     |> maybe_add_keep_alive(request.options[:keep_alive])
+    |> maybe_add_reasoning_effort(request.options[:reasoning_effort])
   end
 
   defp maybe_add_num_ctx(body, nil), do: body
@@ -163,6 +181,12 @@ defmodule ReqLLM.Providers.Ollama do
 
   defp maybe_add_keep_alive(body, nil), do: body
   defp maybe_add_keep_alive(body, keep_alive), do: Map.put(body, :keep_alive, keep_alive)
+
+  defp maybe_add_reasoning_effort(body, nil), do: body
+  # The core :reasoning_effort option validates to an atom (:none, :low, …);
+  # Ollama's OpenAI-compatible body expects the string form.
+  defp maybe_add_reasoning_effort(body, effort),
+    do: Map.put(body, :reasoning_effort, to_string(effort))
 
   defp encode_stream_body(model, context, opts) do
     req_opts =
