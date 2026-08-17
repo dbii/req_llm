@@ -78,7 +78,6 @@ defmodule ReqLLM.Integration.OllamaRequestBodyTest do
       end
 
     if reasoning_model == nil do
-      # No reasoning model available — nothing to exercise.
       assert true
     else
       schema = [city: [type: :string, required: true]]
